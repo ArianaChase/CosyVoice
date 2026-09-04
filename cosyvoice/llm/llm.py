@@ -352,7 +352,7 @@ class Qwen2LM(TransformerLM):
             self,
             batch: dict,
             device: torch.device,
-    ) -> Dict[str, Optional[torch.Tensor]]:
+    ):
         """
         Args:
             text: (B, L, D)
@@ -391,8 +391,30 @@ class Qwen2LM(TransformerLM):
             lm_target, lm_input, lm_input_len = self.prepare_lm_input_target(sos_emb, text_token, text_token_emb, text_token_len, task_id_emb,
                                                                              speech_token, speech_token_emb, speech_token_len, instruct_token, instruct_token_emb, instruct_token_len)
         elif self.__class__.__name__ == 'Qwen2LM':
-            lm_target, lm_input, lm_input_len = self.prepare_lm_input_target(sos_emb, text_token, text_token_emb, text_token_len, task_id_emb,
-                                                                             speech_token, speech_token_emb, speech_token_len)
+            text_token_unpad = unpad_sequence(text_token, text_token_len.cpu(), batch_first=True)  
+            speech_token_unpad = unpad_sequence(speech_token, speech_token_len.cpu(), batch_first=True)  
+            text_token_emb_unpad = unpad_sequence(text_token_emb, text_token_len.cpu(), batch_first=True)  
+            speech_token_emb_unpad = unpad_sequence(speech_token_emb, speech_token_len.cpu(), batch_first=True)  
+        
+            lm_target, lm_input = [], []  
+            for i in range(len(text_token_unpad)):  
+                this_lm_target = torch.tensor(  
+                    [IGNORE_ID] * (1 + text_token_len[i].item())  
+                    + speech_token_unpad[i].tolist()  
+                    + [self.eos_token]  
+                )  
+                this_lm_input = torch.concat([  
+                    sos_emb.squeeze(dim=0),  
+                    text_token_emb_unpad[i],  
+                    task_id_emb.squeeze(dim=0),  
+                    speech_token_emb_unpad[i],  
+                ], dim=0)  
+                lm_target.append(this_lm_target)  
+                lm_input.append(this_lm_input)  
+        
+            lm_input_len = torch.tensor([x.size(0) for x in lm_input], dtype=torch.int32)  
+            lm_input = pad_sequence(lm_input, batch_first=True, padding_value=IGNORE_ID)  
+            lm_target = pad_sequence(lm_target, batch_first=True, padding_value=IGNORE_ID)
         else:
             raise ValueError
         lm_target = lm_target.to(device)
@@ -402,7 +424,7 @@ class Qwen2LM(TransformerLM):
         logits = self.llm_decoder(lm_output)
         loss = self.criterion_ce(logits, lm_target.to(device))
         acc = th_accuracy(logits.view(-1, self.llm_decoder.out_features), lm_target, ignore_label=IGNORE_ID)
-        return {'loss': loss, 'acc': acc}
+        return logits, lm_target
 
     def forward_dpo(
             self,
