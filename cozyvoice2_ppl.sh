@@ -1,11 +1,13 @@
 root_dir=~/speech_ppl
 
 echo "Running CosyVoice scoring..."
+output_dir=$root_dir/work/outputs/cosyvoice2/test_B/set_B/235_samples
+mkdir -p $output_dir
 python $root_dir/CosyVoice/cozyvoice2_ppl_synth.py \
-    --dataset_dir $root_dir/src/stim_final/real_experiment_audio \
+    --dataset_dir $root_dir/src/stim_final/setB_audio \
     --annotation_dir $root_dir/src/scores_enhanced.json \
     --alignments_file $root_dir/src/mfa/phone_extraction.json \
     --root_dir $root_dir \
-    --output_dir $root_dir/work/outputs/cosyvoice2/ \
+    --output_dir $output_dir \
     --test B \
-    --set setC \
+    --set setB \

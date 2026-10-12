@@ -46,6 +46,7 @@ BATCH_SIZE = 8
 print(torch.cuda.is_available())
 print(onnxruntime.get_available_providers())
 
+
 def process_synth(input_dataset, audio_version, metadata, text_version):
 
     audio_file_info = []
@@ -64,9 +65,12 @@ def process_synth(input_dataset, audio_version, metadata, text_version):
             #print(filename)
             metadata_obj = metadata[metadata["utt_id"] == filename].iloc[0]
         else:
-            metadata_obj = metadata[metadata["stim_id"] == filename].iloc[0]
+            try:
+                metadata_obj = metadata[metadata["stim_id"] == filename].iloc[0]
+            except IndexError:
+                continue
 
-        if metadata_obj['has_foil'] != "yes" or metadata_obj['align_ok'] != "yes":
+        if args.set == "setC" and metadata_obj['has_foil'] != "yes":
             continue
         if ver != audio_version:
             continue
@@ -276,23 +280,32 @@ if __name__ == "__main__":
 
     # process dataset
     input_dataset = args.dataset_dir
-    METADATA_PATH = "/home/ubuntu/speech_ppl/src/stim_final/setC_stimuli_list.csv"
+    METADATA_PATH = "/home/ubuntu/speech_ppl/src/stim_final/setB_stimuli_list.csv"
     metadata = pd.read_csv(METADATA_PATH, dtype=str)
 
-    for AUDIO_VERSION in ['real', 'ref']:
-        for TEXT_VERS in ['real', 'ref', 'foil']: 
-
-            if AUDIO_VERSION == 'ref' and TEXT_VERS =='ref':
-                continue
-
-            processed = process_synth(input_dataset, AUDIO_VERSION, metadata, TEXT_VERS)
+    if args.set == "setC":
+        AUDIO_VERSION = ['real', 'ref']
+        TEXT_VERS = ['real', 'ref', 'foil']
+    elif args.set == "setB" and args.test == "B":
+        AUDIO_VERSION = ['clean', 'sub']
+        TEXT_VERS = ['clean', 'sub']
+    elif args.set == "setB" and args.test == "A":
+        AUDIO_VERSION = ['clean', 'sub', 'dist']
+        TEXT_VERS = [None]
+    else:
+        AUDIO_VERSION = []
+        TEXT_VERS = []
+    for audio_version in AUDIO_VERSION:
+        for text_vers in TEXT_VERS: 
+            
+            processed = process_synth(input_dataset, audio_version, metadata, text_vers)
             processed_dataset = processed["processed"]
             print(f"Processed {len(processed_dataset)} samples.")
 
             if args.test == "A":
-                csv_path = f"{OUTPUT_DIR}/{MODEL_TYPE}_{MODEL_NAME}_{AUDIO_VERSION}_{args.set}_per_token_losses.csv"   
+                csv_path = f"{OUTPUT_DIR}/{MODEL_TYPE}_{MODEL_NAME}_{audio_version}_{args.set}_per_token_losses.csv"   
             elif args.test == "B":
-                csv_path = f"{OUTPUT_DIR}/{MODEL_TYPE}_{MODEL_NAME}_{AUDIO_VERSION}_{TEXT_VERS}_{args.set}_per_token_losses.csv"   
+                csv_path = f"{OUTPUT_DIR}/{MODEL_TYPE}_{MODEL_NAME}_{audio_version}_{text_vers}_{args.set}_per_token_losses.csv"   
 
             results = get_losses(
                 dataset=processed_dataset, 
